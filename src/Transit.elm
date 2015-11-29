@@ -66,7 +66,7 @@ update action model =
 
     Enter modelUpdate delay ->
       let
-        newModel = { model | transitStatus = Entering }
+        newModel = modelUpdate { model | transitStatus = Entering }
         enteredEffect = Effects.task (scheduleEntered delay)
       in
         (newModel, enteredEffect)
