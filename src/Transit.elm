@@ -1,8 +1,21 @@
 module Transit (init, update, status, Action, WithTransition) where
 
+{-| Delayed model update for transition effects in Elm.
+
+# Types
+@docs Action, WithTransition
+
+# Updates
+@docs init, update
+
+# Helpers
+@docs status
+-}
+
 import Effects exposing (Effects)
 import Task exposing (Task, andThen, sleep, succeed)
 import Time exposing (Time)
+
 
 {-| An extensible record type containing the transition status -}
 type alias WithTransition m =

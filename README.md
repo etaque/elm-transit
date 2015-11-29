@@ -13,8 +13,8 @@ type Page = Page1 | Page2
 type alias Model = Transit.WithTransition { page: Page }
 ```
 
-Wrap `Transit.Action` in one of your action types and call `Transit.init` and
-`Transit.update` in your update function.
+Wrap `Action` in one of your action types and call `init` and
+`update` in your update function.
 
 ```elm
 type Action = NextPage | TransitAction Transit.Action
@@ -47,5 +47,5 @@ You can use the `status` method to get a class name for you views and apply
 transition visual effects:
 
 ```elm
-  div [ class (Transit.status model) ] [ text "Some content"]
+  div [ class (Transit.status model) ] [ text "Some content" ]
 ```
