@@ -1,15 +1,15 @@
-module Transit (init, update, status, Action, WithTransition) where
+module Transit (init, update, statusName, Status(..), Action, WithTransition) where
 
 {-| Delayed model update for transition effects in Elm.
 
 # Types
-@docs Action, WithTransition
+@docs Action, Status, WithTransition
 
 # Updates
 @docs init, update
 
 # Helpers
-@docs status
+@docs statusName
 -}
 
 import Effects exposing (Effects)
@@ -24,6 +24,11 @@ type alias WithTransition m =
 type alias ModelUpdate m =
   WithTransition m -> WithTransition m
 
+{-| A type for the transition status
+* Exiting: model update scheduled
+* Entering: model update applied
+* Entered: transition finished
+-}
 type Status
   = Exiting
   | Entering
@@ -34,6 +39,7 @@ type Action m
   = Exit (ModelUpdate m) Time
   | Enter (ModelUpdate m) Time
   | End
+
 
 {-| Initialize the transition. The returned effect is carrying the exit action,
 holding the desired model update to be done and the transition delay (before and
@@ -85,8 +91,8 @@ delayed delay task =
 
 
 {-| Helper for the views: class name with CSS transition -}
-status : WithTransition m -> String
-status model =
+statusName : WithTransition m -> String
+statusName model =
   case model.transitStatus of
     Exiting ->
       "exiting"
