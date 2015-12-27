@@ -1,6 +1,8 @@
 # Elm Transit
 
-Delayed model updates, typically for page transitions in single page apps.
+Animated transitions between pages or components for your Elm apps. The purpose of this package is to make it trivial to add transition to you app, so it's a bit opiniated.
+
+Uses elm-animations and Effects.tick for animation logic.
 
 ## Usage
 
