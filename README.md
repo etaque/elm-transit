@@ -4,48 +4,39 @@ Delayed model updates, typically for page transitions in single page apps.
 
 ## Usage
 
-Extend `WithTransition` record type with your own model.
+Extend `WithTransition` record type with your own model. 
 
 ```elm
 import Transit
 
-type Page = Page1 | Page2
-type alias Model = Transit.WithTransition { page: Page }
+type Route = ...
+type alias Model = Transit.WithTransition { route: Maybe Route }
 ```
 
-Wrap `Action` in one of your action types and call `init` and
+Note: you can also use it for sub-pages or components transitions.
+
+Then wrap `Action` in one of your action types and call `init` and
 `update` in your update function.
 
 ```elm
-type Action = NextPage | TransitAction Transit.Action
+type Action = UpdateRoute Route | TransitAction Transit.Action
 
 update : Action -> Model -> (Model, Effects Action)
 update action model =
   case action of
 
-    NextPage ->
+    UpdateRoute route ->
       let
-        effect = Effects.map TransitAction (Transit.init nextPage 150)
+        newModel = { model | route = Just route }
       in
-        (model, effect)
+        Transit.init 100 newModel TransitAction 
 
-    TransitAction ta ->
-      let
-        (newModel, transitEffect) = Transit.update ta model
-        effect = Effects.map TransitAction transitEffect
-      in
-        (newModel, effect)
-
-nextPage : Model -> Model
-nextPage model =
-  case model.page of
-    Page1 -> Page2
-    Page2 -> Page1
+    TransitAction a ->
+      Transit.update a model TransitAction
 ```
 
-You can use the `status` method to get a class name for you views and apply
-transition visual effects:
+You can then use the provided `slideLeftStyle` function to add the visual effect in your view:
 
 ```elm
-  div [ class (Transit.status model) ] [ text "Some content" ]
+  div [ class "content", style (Transit.slideLeftStyle model.transition) ] [ text "Some content" ]
 ```

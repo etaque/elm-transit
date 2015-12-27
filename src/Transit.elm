@@ -1,102 +1,123 @@
-module Transit (init, update, statusName, Status(..), Action, WithTransition) where
+module Transit (Transition, WithTransition, Action, initAction, step, init, update, value, empty, slideLeftStyle) where
 
-{-| Delayed model update for transition effects in Elm.
+{-| Animated transitions between pages or components for your Elm apps.
+The purpose of this package is to make it trivial to add transition to you app, so it's a bit opiniated.
 
-# Types
-@docs Action, Status, WithTransition
+Uses elm-animations and Effects.tick for animation logic.
 
-# Updates
-@docs init, update
+# Model
+@docs Transition, WithTransition, empty, Action
 
-# Helpers
-@docs statusName
+# Update
+@docs init, update, initAction, step
+
+# View
+@docs slideLeftStyle, value
 -}
 
-import Effects exposing (Effects)
-import Task exposing (Task, andThen, sleep, succeed)
 import Time exposing (Time)
+import Effects exposing (Effects)
+import Animation exposing (..)
 
 
-{-| An extensible record type containing the transition status -}
-type alias WithTransition m =
-  { m | transitStatus : Status }
+{-| Transition action, to be wrapped in your own action type
+ -}
+type Action = Init Time | Start Time Time | Tick Animation Time
 
-type alias ModelUpdate m =
-  WithTransition m -> WithTransition m
+{-| An opaque type for internal value storage
+ -}
+type Transition = T (Maybe Float)
 
-{-| A type for the transition status
-* Exiting: model update scheduled
-* Entering: model update applied
-* Entered: transition finished
--}
-type Status
-  = Exiting
-  | Entering
-  | Entered
+{-| Helper for adding transition on your model
+ -}
+type alias WithTransition model = { model | transition : Transition }
 
-{-| A type for transition steps -}
-type Action m
-  = Exit (ModelUpdate m) Time
-  | Enter (ModelUpdate m) Time
-  | End
+{-| Empty transition state, as initial value in the model.
+ -}
+empty : Transition
+empty =
+  T Nothing
 
 
-{-| Initialize the transition. The returned effect is carrying the exit action,
-holding the desired model update to be done and the transition delay (before and
-after the model update)
--}
-init : ModelUpdate m -> Time -> Effects (Action m)
-init modelUpdate delay =
-   succeed (Exit modelUpdate delay)
-     |> Effects.task
+start : Transition
+start =
+  T (Just 0)
 
-{-| Update the transition status, and apply the desired model update when it's time to.
-Returns the updated model and the effect carrying the next transition action.
--}
-update : Action m -> WithTransition m -> (WithTransition m, Effects (Action m))
-update action model =
+set : Float -> Transition
+set =
+  T << Just
+
+{-| Helper that generates a new transition with the following params:
+
+ * Animation duration (ms)
+ * Model holding the transition
+ * Action wrapper for the incoming effect (saves one `Effects.map`)
+
+Returns:
+
+ * Updated model with new transition state
+ * Effects for next steps
+ -}
+init : Time -> WithTransition model -> (Action -> action) -> (WithTransition model, Effects action)
+init dur model actionWrapper =
+  update (initAction dur) model actionWrapper
+
+{-| Helper for walking transition steps, same spec as `init but processing actions. Use `step` internally.
+ -}
+update : Action -> WithTransition model -> (Action -> action) -> (WithTransition model, Effects action)
+update action model actionWrapper =
+  let
+    (t, fx) = step action
+  in
+    ({ model | transition = t }, Effects.map actionWrapper fx)
+
+{-| Init action, if you need to produce it manually. See `init` otherwise.
+ -}
+initAction : Time -> Action
+initAction =
+  Init
+
+{-| Walks transition's next step. See `update` helper.
+ -}
+step : Action -> (Transition, Effects Action)
+step action =
   case action of
 
-    Exit modelUpdate delay ->
+    Init dur ->
+      (start, Effects.tick (Start dur))
+
+    Start dur time ->
       let
-        newModel = { model | transitStatus = Exiting }
-        enteringEffect = Effects.task (scheduleEntering modelUpdate delay)
+        anim = animation time |> duration dur
+        fx = Effects.tick (Tick anim)
       in
-        (newModel, enteringEffect)
+        (set (animate time anim), fx)
 
-    Enter modelUpdate delay ->
-      let
-        newModel = modelUpdate { model | transitStatus = Entering }
-        enteredEffect = Effects.task (scheduleEntered delay)
-      in
-        (newModel, enteredEffect)
-
-    End ->
-      ({ model | transitStatus = Entered }, Effects.none)
+    Tick anim time ->
+      if isDone time anim then
+        (empty, Effects.none)
+      else
+        (set (animate time anim), Effects.tick (Tick anim))
 
 
-scheduleEntering : ModelUpdate m -> Time -> Task.Task x (Action m)
-scheduleEntering modelUpdate delay =
-  delayed delay (succeed (Enter modelUpdate delay))
+{-| A simple left-sliding style value for elm-html.
 
+    div [ class "content", style (Transit.slideLeftStyle model.transition) ] someContent
 
-scheduleEntered : Time -> Task x (Action m)
-scheduleEntered delay =
-  delayed delay (succeed End)
+You can create your own with `value` extract function.
+-}
+slideLeftStyle : Transition -> List (String, String)
+slideLeftStyle (T value) =
+  case value of
+    Just v ->
+      [ ("opacity", toString v)
+      , ("transform", "translateX(" ++ toString (40 - v * 40) ++ "px)")
+      ]
+    Nothing ->
+      []
 
-
-delayed : Time -> (Task error value) -> Task error value
-delayed delay task =
-  sleep delay `andThen` \_ -> task
-
-
-{-| Helper for the views: class name with CSS transition -}
-statusName : WithTransition m -> String
-statusName model =
-  case model.transitStatus of
-    Exiting ->
-      "exiting"
-    Entering ->
-      "entering"
-    Entered ->
-      "entered"
+{-| Extract current animation value (a float between 0 and 1).
+ -}
+value : Transition -> Maybe Float
+value (T v) =
+  v
