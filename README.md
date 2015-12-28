@@ -11,11 +11,12 @@ Extend `WithTransition` record type with your own model.
 ```elm
 import Transit
 
+-- let's say your model is holding a Route to store current page
 type Route = ...
 type alias Model = Transit.WithTransition { route: Maybe Route }
 ```
 
-Note: you can also use it for sub-pages or components transitions.
+(Note: you're not bound to root model, you can also use it for sub-pages or components transitions)
 
 Then wrap `Action` in one of your action types and call `init` and
 `update` in your update function.
