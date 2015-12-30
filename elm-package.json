@@ -1,5 +1,5 @@
 {
-    "version": "3.0.0",
+    "version": "4.0.0",
     "summary": "Simple transition animation for switching between pages in a single page app.",
     "repository": "https://github.com/etaque/elm-transit.git",
     "license": "BSD3",
@@ -7,12 +7,13 @@
         "src"
     ],
     "exposed-modules": [
-      "Transit", "Transit.Style"
+        "Transit",
+        "Transit.Style"
     ],
     "dependencies": {
         "elm-lang/core": "3.0.0 <= v < 4.0.0",
-        "mgold/elm-animation": "1.0.3 <= v < 2.0.0",
-        "evancz/elm-effects": "2.0.1 <= v < 3.0.0"
+        "evancz/elm-effects": "2.0.1 <= v < 3.0.0",
+        "mgold/elm-animation": "1.0.3 <= v < 2.0.0"
     },
     "elm-version": "0.16.0 <= v < 0.17.0"
 }
