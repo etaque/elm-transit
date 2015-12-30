@@ -32,7 +32,10 @@ update action model =
   case action of
 
     Click page ->
-      Transit.init TransitAction (Transit.defaultTimeline (SetPage page)) model
+      let
+        timeline = Transit.timeline 100 (SetPage page) 200
+      in
+        Transit.init TransitAction timeline model
 
     SetPage page ->
       ({ model | page = page }, Effects.none)

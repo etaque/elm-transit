@@ -37,8 +37,8 @@ update action model =
 
     NavigateTo page ->
       let
-        timeline = Transit.defaultTimeline (SetPage page) 
-        -- see withExitDuration and withEnterDuration for customisation
+        timeline = Transit.timeline 100 (SetPage page) 200
+        -- 100m from 0 to 1, then action, then 200ms from 0 to 1
       in
         Transit.init TransitAction timeline model
 

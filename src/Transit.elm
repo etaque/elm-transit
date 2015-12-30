@@ -1,7 +1,8 @@
 module Transit
-  ( Transition, WithTransition, initial, Action
-  , Timeline, defaultTimeline, withEnterDuration, withExitDuration
-  , init, update, getValue, getStatus, Status(..)
+  ( Transition, WithTransition, initial
+  , Timeline, timeline, defaultTimeline, withEnterDuration, withExitDuration
+  , Action, init, update
+  , Status(..), getStatus, getValue
   ) where
 
 {-| Styled transitions with minimal boilerplate, typically for page transitions in single page apps.
@@ -11,10 +12,13 @@ See README or [example](https://github.com/etaque/elm-transit/blob/master/exampl
 Uses elm-animations and Effects.tick for animation logic.
 
 # Model
-@docs Transition, WithTransition, initial, Action, Timeline
+@docs Transition, WithTransition, initial
+
+# Timeline
+@docs Timeline, timeline, defaultTimeline, withExitDuration, withEnterDuration
 
 # Update
-@docs init, defaultTimeline, withExitDuration, withEnterDuration, update
+@docs Action, init, update
 
 # View
 @docs getValue, getStatus, Status
@@ -48,6 +52,7 @@ type alias AnimationState =
   , animation : Animation
   }
 
+
 {-| Transition action, to be wrapped in your own action type. -}
 type Action a
   = Init (Timeline a)
@@ -55,27 +60,32 @@ type Action a
   | ExitTick (Timeline a) AnimationState Time
   | EnterTick AnimationState Time
 
-{-| Timeline of the transition to run:
-
-> exitDuration => action => enterDuration
- -}
-type alias Timeline a =
-  { exitDuration : Float
-  , action : a
-  , enterDuration : Float
-  }
-
 
 {-| Empty transition state, as initial value in the model. -}
 initial : Transition
 initial =
   T initialState
 
+
 {-| Private -}
 initialState : State
 initialState =
   State 0 Done 0
 
+
+{-| Timeline of the transition -}
+type alias Timeline a =
+  { exitDuration : Float
+  , action : a
+  , enterDuration : Float
+  }
+
+{-| Build the timeline:
+> exitDuration => action => enterDuration
+-}
+timeline : Float -> a -> Float -> Timeline a
+timeline =
+  Timeline
 
 {-| Default timeline for this action: exit of 100ms then enter of 200ms. -}
 defaultTimeline : a -> Timeline a
