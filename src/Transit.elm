@@ -1,6 +1,7 @@
 module Transit
-  ( Transition, WithTransition, initial, Action, Setup
-  , init, update, value, status, Status(..)
+  ( Transition, WithTransition, initial, Action
+  , Timeline, defaultTimeline, withEnterDuration, withExitDuration
+  , init, update, getValue, getStatus, Status(..)
   ) where
 
 {-| Animated transitions between pages or components for your Elm apps.
@@ -9,140 +10,197 @@ The purpose of this package is to make it trivial to add transition to you app, 
 Uses elm-animations and Effects.tick for animation logic.
 
 # Model
-@docs Transition, WithTransition, initial, Action, Setup
+@docs Transition, WithTransition, initial, Action, Timeline
+
 
 # Update
-@docs init, update
+@docs init, defaultTimeline, withExitDuration, withEnterDuration, update
 
 # View
-@docs value, status, Status
+@docs getValue, getStatus, Status
 -}
 
 import Time exposing (Time)
+import Task exposing (Task)
 import Effects exposing (Effects)
 import Animation exposing (Animation)
 
 
-{-| Helper for adding transition on your model
- -}
+{-| Extended type for the target model holding the transition -}
 type alias WithTransition model = { model | transition : Transition }
 
-{-| An opaque type for internal value storage
- -}
+{-| Opaque type for internal value storage -}
 type Transition = T State
 
-{-| Internal (private) state of the transition -}
+{-| Private: internal state of the transition, stored in target model -}
 type alias State =
   { value : Float
   , status : Status
+  , startTime : Time
   }
 
 {-| Transition status -}
 type Status = Exit | Enter | Done
 
+{-| Private: animation state, stored in ticks -}
+type alias AnimationState =
+  { startTime : Time
+  , animation : Animation
+  }
 
-{-| Transition action, to be wrapped in your own action type
- -}
+{-| Transition action, to be wrapped in your own action type -}
 type Action a
-  = Init (Setup a)
-  | Start (Setup a) Time
-  | ExitTick (Setup a) Animation Time
-  | EnterTick Animation Time
+  = Init (Timeline a)
+  | Start (Timeline a) Time
+  | ExitTick (Timeline a) AnimationState Time
+  | EnterTick AnimationState Time
 
-{-| Setup of the transition to run -}
-type alias Setup a =
+{-| Timeline of the transition to run:
+
+    exitDuration -> action -> enterDuration
+ -}
+type alias Timeline a =
   { exitDuration : Float
+  , action : a
   , enterDuration : Float
-  , targetEffects : Effects a
   }
 
 
-{-| Empty transition state, as initial value in the model.
- -}
+{-| Empty transition state, as initial value in the model. -}
 initial : Transition
 initial =
   T initialState
 
+{-| Private -}
 initialState : State
 initialState =
-  State 0 Done
+  State 0 Done 0
 
 
-{-| Initial action to start transition -}
-initAction : Setup a -> Action a
-initAction =
-  Init
+{-| Default timeline for this action: exit of 100ms then enter of 200ms -}
+defaultTimeline : a -> Timeline a
+defaultTimeline action =
+  Timeline 100 action 200
 
 
-{-| Initialize the transition
+{-| Update exit duration of timeline -}
+withExitDuration : Float -> Timeline a -> Timeline a
+withExitDuration d timeline =
+  { timeline | exitDuration = d }
+
+
+{-| Update enter duration of timeline -}
+withEnterDuration : Float -> Timeline a -> Timeline a
+withEnterDuration d timeline =
+  { timeline | enterDuration = d }
+
+
+{-| A shortcut to `update` that initialize the transition with the following parameters:
+* `actionWrapper` to wrap Transit's action into app's Action type (saves one `Effects.map`)
+* `timeline` to setup transition
+* `target` is the model storing the Transition, that will be updated with new transition state
  -}
-init : ((Action a) -> a) -> Setup a -> WithTransition target -> (WithTransition target, Effects a)
-init actionWrapper setup =
-  update actionWrapper (initAction setup)
+init : ((Action a) -> a) -> Timeline a -> WithTransition target -> (WithTransition target, Effects a)
+init actionWrapper timeline =
+  update actionWrapper (Init timeline)
 
 
-{-| Where all the logic happens. Run transition next step,
-and triggers target effects (transition host) when needed.
+{-| Where all the logic happens. Run transition steps, and triggers timeline's action when needed.
+* `actionWrapper` to wrap Transit's action into app's Action type (saves one `Effects.map`)
+* `action` is the Transit action to process
+* `target` is the model storing the Transition, that will be updated with new transition state
  -}
 update : ((Action a) -> a) -> Action a -> WithTransition target -> (WithTransition target, Effects a)
 update actionWrapper action target =
   let
-    result (state, fx) =
+    -- extract state from shadow type
+    state = case target.transition of T s -> s
+
+    -- stop everything if an other (newer) transition has been stored in target
+    watchRetarget animState (newState, fx) =
+      if state.startTime == animState.startTime then
+        (newState, fx)
+      else
+        (state, Effects.none)
+
+    -- wrap result for target's types
+    wrapForTarget (state, fx) =
       ({ target | transition = T state }, Effects.map actionWrapper fx)
+
   in
     case action of
 
-      Init setup ->
-        (State 0 Exit, Effects.tick (Start setup))
-          |> result
+      Init timeline ->
+        -- start transition with a tick (time is required for animation start)
+        (State 0 Exit 0, Effects.tick (Start timeline))
+          |> wrapForTarget
 
-      Start setup time ->
-        Animation.animation time
-          |> Animation.duration setup.exitDuration
-          |> exitStep 0 setup
-          |> result
+      Start timeline time ->
+        -- emit initial ExitTick carrying animation state
+        let
+          newAnim = Animation.animation time
+            |> Animation.duration timeline.exitDuration
+          -- store transition start time to be able to deal with retargeting
+          newState = { state | startTime = time }
+        in
+          exitStep 0 timeline (AnimationState time newAnim) newState
+            |> wrapForTarget
 
-      ExitTick setup exitAnim time ->
-        if Animation.isRunning time exitAnim then
-          exitStep (Animation.animate time exitAnim) setup exitAnim
-            |> result
+      ExitTick timeline animState time ->
+        if Animation.isRunning time animState.animation then
+          -- emit next ExitTick while animation is running
+          exitStep (Animation.animate time animState.animation) timeline animState state
+            |> watchRetarget animState
+            |> wrapForTarget
         else
-          Animation.animation time
-            |> Animation.duration setup.enterDuration
-            |> enterStep 0
-            |> result
-            |> triggerTargetEffects setup.targetEffects
+          -- otherwise trigger action and emit initial EnterTick with new animation state
+          let
+            newAnim = Animation.animation time
+              |> Animation.duration timeline.enterDuration
+          in
+            enterStep 0 { animState | animation = newAnim } state
+              |> watchRetarget animState
+              |> wrapForTarget
+              |> triggerTimelineAction timeline.action
 
-      EnterTick enterAnim time ->
-        if Animation.isRunning time enterAnim then
-          enterStep (Animation.animate time enterAnim) enterAnim
-            |> result
+      EnterTick animState time ->
+        if Animation.isRunning time animState.animation then
+          -- emit next EnterTick while animation is running
+          enterStep (Animation.animate time animState.animation) animState state
+            |> watchRetarget animState
+            |> wrapForTarget
         else
+          -- otherwise stop here
           (initialState, Effects.none)
-            |> result
+            |> wrapForTarget
 
 
-triggerTargetEffects : Effects a -> (WithTransition target, Effects a) -> (WithTransition target, Effects a)
-triggerTargetEffects targetFx (state, fx) =
-  (state, Effects.batch [ fx, targetFx ])
+{-| Private: add target action within a batch -}
+triggerTimelineAction : a -> (WithTransition target, Effects a) -> (WithTransition target, Effects a)
+triggerTimelineAction targetAction (state, fx) =
+  (state, Effects.batch [ fx, Effects.task <| Task.succeed targetAction ])
 
 
-exitStep : Float -> Setup target -> Animation -> (State, Effects (Action target))
-exitStep value setup anim =
-  (State value Exit, Effects.tick (ExitTick setup anim))
+{-| Private: update state and emit tick for Exit step -}
+exitStep : Float -> Timeline target -> AnimationState -> State -> (State, Effects (Action target))
+exitStep value timeline animState state =
+  ({ state | value = value, status = Exit }, Effects.tick (ExitTick timeline animState))
 
-enterStep : Float -> Animation -> (State, Effects (Action target))
-enterStep value anim =
-  (State value Enter, Effects.tick (EnterTick anim))
+
+{-| Private: update state and emit tick for Enter step -}
+enterStep : Float -> AnimationState -> State -> (State, Effects (Action target))
+enterStep value animState state =
+  ({ state | value = value, status = Enter }, Effects.tick (EnterTick animState))
 
 
 {-| Extract current animation value (a float between 0 and 1). -}
-value : Transition -> Float
-value (T state) =
+getValue : Transition -> Float
+getValue (T state) =
   state.value
 
+
 {-| Extract current animation status. -}
-status : Transition -> Status
-status (T state) =
+getStatus : Transition -> Status
+getStatus (T state) =
   state.status
 
