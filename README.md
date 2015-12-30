@@ -1,6 +1,8 @@
 # Elm Transit
 
-Delayed model updates, typically for page transitions in single page apps.
+Animated transitions between pages or components for your Elm apps. The purpose of this package is to make it trivial to add transition to you app, so it's a bit opiniated.
+
+Uses elm-animations and Effects.tick for animation logic.
 
 ## Usage
 
@@ -9,11 +11,12 @@ Extend `WithTransition` record type with your own model.
 ```elm
 import Transit
 
+-- let's say your model is holding a Route to store current page
 type Route = ...
 type alias Model = Transit.WithTransition { route: Maybe Route }
 ```
 
-Note: you can also use it for sub-pages or components transitions.
+(Note: you're not bound to root model, you can also use it for sub-pages or components transitions)
 
 Then wrap `Action` in one of your action types and call `init` and
 `update` in your update function.
