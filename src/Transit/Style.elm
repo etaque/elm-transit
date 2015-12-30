@@ -8,7 +8,7 @@ module Transit.Style
 {-| Default animations for transitions, to be used on elm-html `style` attribute.
 
     div
-      [ style (TransitStyle.fadeSlideLeft 100 model) ]
+      [ style (fadeSlideLeft 100 model) ]
       [ text "content" ]
 
 # Compositions

@@ -4,14 +4,14 @@ module Transit
   , init, update, getValue, getStatus, Status(..)
   ) where
 
-{-| Animated transitions between pages or components for your Elm apps.
-The purpose of this package is to make it trivial to add transition to you app, so it's a bit opiniated.
+{-| Styled transitions with minimal boilerplate, typically for page transitions in single page apps.
+
+See README or [example](https://github.com/etaque/elm-transit/blob/master/example/src/Main.elm) for usage.
 
 Uses elm-animations and Effects.tick for animation logic.
 
 # Model
 @docs Transition, WithTransition, initial, Action, Timeline
-
 
 # Update
 @docs init, defaultTimeline, withExitDuration, withEnterDuration, update
@@ -26,29 +26,29 @@ import Effects exposing (Effects)
 import Animation exposing (Animation)
 
 
-{-| Extended type for the target model holding the transition -}
+{-| Extended type for the target model holding the transition. -}
 type alias WithTransition model = { model | transition : Transition }
 
-{-| Opaque type for internal value storage -}
+{-| Opaque type for transition state storage. -}
 type Transition = T State
 
-{-| Private: internal state of the transition, stored in target model -}
+{-| Private: internal state of the transition, stored in target model. -}
 type alias State =
   { value : Float
   , status : Status
   , startTime : Time
   }
 
-{-| Transition status -}
+{-| Transition status. -}
 type Status = Exit | Enter | Done
 
-{-| Private: animation state, stored in ticks -}
+{-| Private: animation state, stored in ticks. -}
 type alias AnimationState =
   { startTime : Time
   , animation : Animation
   }
 
-{-| Transition action, to be wrapped in your own action type -}
+{-| Transition action, to be wrapped in your own action type. -}
 type Action a
   = Init (Timeline a)
   | Start (Timeline a) Time
@@ -57,7 +57,7 @@ type Action a
 
 {-| Timeline of the transition to run:
 
-    exitDuration -> action -> enterDuration
+> exitDuration => action => enterDuration
  -}
 type alias Timeline a =
   { exitDuration : Float
@@ -77,28 +77,29 @@ initialState =
   State 0 Done 0
 
 
-{-| Default timeline for this action: exit of 100ms then enter of 200ms -}
+{-| Default timeline for this action: exit of 100ms then enter of 200ms. -}
 defaultTimeline : a -> Timeline a
 defaultTimeline action =
   Timeline 100 action 200
 
 
-{-| Update exit duration of timeline -}
+{-| Update exit duration of timeline. -}
 withExitDuration : Float -> Timeline a -> Timeline a
 withExitDuration d timeline =
   { timeline | exitDuration = d }
 
 
-{-| Update enter duration of timeline -}
+{-| Update enter duration of timeline. -}
 withEnterDuration : Float -> Timeline a -> Timeline a
 withEnterDuration d timeline =
   { timeline | enterDuration = d }
 
 
 {-| A shortcut to `update` that initialize the transition with the following parameters:
-* `actionWrapper` to wrap Transit's action into app's Action type (saves one `Effects.map`)
+* `actionWrapper` to wrap Transit's action into your app's Action type (saves you one `Effects.map`)
 * `timeline` to setup transition
 * `target` is the model storing the Transition, that will be updated with new transition state
+Returns a tuple that you can directly return from your `update`.
  -}
 init : ((Action a) -> a) -> Timeline a -> WithTransition target -> (WithTransition target, Effects a)
 init actionWrapper timeline =
@@ -106,9 +107,9 @@ init actionWrapper timeline =
 
 
 {-| Where all the logic happens. Run transition steps, and triggers timeline's action when needed.
-* `actionWrapper` to wrap Transit's action into app's Action type (saves one `Effects.map`)
-* `action` is the Transit action to process
-* `target` is the model storing the Transition, that will be updated with new transition state
+* `actionWrapper` to wrap Transit's action into app's Action type (saves one `Effects.map`),
+* `action` is the Transit action to process,
+* `target` is the model storing the Transition, that will be updated with new transition state.
  -}
 update : ((Action a) -> a) -> Action a -> WithTransition target -> (WithTransition target, Effects a)
 update actionWrapper action target =
@@ -175,19 +176,19 @@ update actionWrapper action target =
             |> wrapForTarget
 
 
-{-| Private: add target action within a batch -}
+{-| Private: add target action within a batch. -}
 triggerTimelineAction : a -> (WithTransition target, Effects a) -> (WithTransition target, Effects a)
 triggerTimelineAction targetAction (state, fx) =
   (state, Effects.batch [ fx, Effects.task <| Task.succeed targetAction ])
 
 
-{-| Private: update state and emit tick for Exit step -}
+{-| Private: update state and emit tick for Exit step. -}
 exitStep : Float -> Timeline target -> AnimationState -> State -> (State, Effects (Action target))
 exitStep value timeline animState state =
   ({ state | value = value, status = Exit }, Effects.tick (ExitTick timeline animState))
 
 
-{-| Private: update state and emit tick for Enter step -}
+{-| Private: update state and emit tick for Enter step. -}
 enterStep : Float -> AnimationState -> State -> (State, Effects (Action target))
 enterStep value animState state =
   ({ state | value = value, status = Enter }, Effects.tick (EnterTick animState))
