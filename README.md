@@ -1,19 +1,23 @@
 # Elm Transit
 
-Animated transitions between pages or components for your Elm apps. The purpose of this package is to make it trivial to add transition to you app, so it's a bit opiniated.
+Styled transitions with minimal boilerplate, typically for page transitions in single page apps:
+
+> exit (float from 0 to 1) -> your action -> enter (float from 0 to 1)
 
 Uses elm-animations and Effects.tick for animation logic.
 
 ## Usage
+
+(Full working example [here](./example/src))
 
 Extend `WithTransition` record type with your own model. 
 
 ```elm
 import Transit
 
--- let's say your model is holding a Route to store current page
-type Route = ...
-type alias Model = Transit.WithTransition { route: Maybe Route }
+type Page = Page1 | Page2
+
+type alias Model = Transit.WithTransition { page: Page }
 ```
 
 (Note: you're not bound to root model, you can also use it for sub-pages or components transitions)
@@ -21,25 +25,32 @@ type alias Model = Transit.WithTransition { route: Maybe Route }
 Then wrap `Action` in one of your action types and call `init` and
 `update` in your update function.
 
+Note that here we have a kind of recursive type definition, as `Transit.Action` with eventually trigger one `Action`.
+
 ```elm
-type Action = UpdateRoute Route | TransitAction Transit.Action
+type Action = NavigateTo Page | SetPage Page | TransitAction (Transit.Action Action)
 
 update : Action -> Model -> (Model, Effects Action)
 update action model =
   case action of
 
-    UpdateRoute route ->
+    NavigateTo page ->
       let
-        newModel = { model | route = Just route }
+        timeline = Transit.defaultTimeline (SetPage page) 
+        -- see withExitDuration and withEnterDuration for customisation
       in
-        Transit.init 100 newModel TransitAction 
+        Transit.init TransitAction timeline model
 
     TransitAction a ->
-      Transit.update a model TransitAction
+      Transit.update TransitAction a model
+        
+    SetPage page ->
+      ({ model | page = page }, Effects.none)
 ```
 
-You can then use the provided `slideLeftStyle` function to add the visual effect in your view:
+You can then use one of the provided functions in `Transit.Style` (or create one of your own)
+to add the visual effect in your view:
 
 ```elm
-  div [ class "content", style (Transit.slideLeftStyle model.transition) ] [ text "Some content" ]
+  div [ class "content", style (Transit.fadeSlideLeft 50 model) ] [ text "Some content" ]
 ```
