@@ -55,3 +55,8 @@ to add the visual effect in your view:
 ```elm
   div [ class "content", style (Transit.fadeSlideLeft 50 model) ] [ text "Some content" ]
 ```
+
+## Credits
+
+* Thanks [Alex Galays](https://twitter.com/boubiyeah) for the challenge
+* Built with [elm-animations](http://package.elm-lang.org/packages/mgold/elm-animation/latest), check it out!
