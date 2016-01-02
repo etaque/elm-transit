@@ -1,5 +1,5 @@
 {
-    "version": "4.0.0",
+    "version": "4.0.1",
     "summary": "Simple transition animation for switching between pages in a single page app.",
     "repository": "https://github.com/etaque/elm-transit.git",
     "license": "BSD3",
