@@ -28,7 +28,6 @@ import Time exposing (Time)
 import Task exposing (Task)
 import Effects exposing (Effects)
 import Animation exposing (Animation)
-import Easing
 
 
 {-| Extended type for the target model holding the transition. -}
@@ -152,7 +151,7 @@ update actionWrapper action target =
         let
           newAnim = Animation.animation time
             |> Animation.duration timeline.exitDuration
-            |> Animation.ease Easing.easeInCubic
+            |> Animation.ease identity
           -- store transition start time to be able to deal with retargeting
           newState = { state | startTime = time }
         in
@@ -170,7 +169,7 @@ update actionWrapper action target =
           let
             newAnim = Animation.animation time
               |> Animation.duration timeline.enterDuration
-              |> Animation.ease Easing.easeOutCubic
+              |> Animation.ease identity
           in
             enterStep 0 { animState | animation = newAnim } state
               |> watchRetarget animState

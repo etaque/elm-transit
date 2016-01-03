@@ -9,7 +9,7 @@ import Signal exposing (Address)
 import Effects exposing (Effects, Never)
 import StartApp
 import Transit
-import Transit.Style as TransitStyle
+import TransitStyle
 
 
 type alias Model = Transit.WithTransition { page : Page }
@@ -52,7 +52,7 @@ view addr model =
       , a [ onClick addr (Click Page2) ] [ text "To page 2" ]
       ]
     , div
-        [ style (TransitStyle.fadeSlideLeft 100 model) ]
+        [ style (TransitStyle.fadeSlideLeft 100 model.transition) ]
         [ text (toString model.page) ]
     ]
 

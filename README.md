@@ -1,17 +1,20 @@
 # Elm Transit
 
-Styled transitions with minimal boilerplate, typically for page transitions in single page apps:
+    elm package install etaque/elm-transit
 
-> exit (float from 0 to 1) -> your action -> enter (float from 0 to 1)
+Delayed actions with transition progress for enter/exit animations in [Elm](http://elm-lang.org/).
 
-Uses elm-animations and Effects.tick for animation logic.
+See also:
+
+* [elm-transit-router](http://package.elm-lang.org/packages/etaque/elm-transit-router/latest): a drop-in router with animated route transitions
+* [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-router/latest): animations for elm-html `style` attribute
 
 
 ## Usage
 
 (Full working example [here](./example/src))
 
-Extend `WithTransition` record type with your own model. 
+Use `WithTransition` record extension to extend your own model:
 
 ```elm
 import Transit
@@ -21,7 +24,7 @@ type Page = Page1 | Page2
 type alias Model = Transit.WithTransition { page: Page }
 ```
 
-(Note: you're not bound to root model, you can also use it for sub-pages or components transitions)
+You're not bound to root model, you can also use it for sub-pages or components transitions.
 
 Then wrap `Action` in one of your action types and call `init` and
 `update` in your update function.
@@ -49,11 +52,15 @@ update action model =
       ({ model | page = page }, Effects.none)
 ```
 
-You can then use one of the provided functions in `Transit.Style` (or create one of your own)
+In your views, you can then either:
+
+* Use `getValue` to get the 0 to 1 varying Float, and `getStatus` to know the current phase of transition.
+
+* Or use one of the provided functions in [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-router/latest) (or create one of your own)
 to add the visual effect in your view:
 
 ```elm
-  div [ class "content", style (Transit.fadeSlideLeft 50 model) ] [ text "Some content" ]
+  div [ style (TransitStyle.fadeSlideLeft 50 model.transition) ] [ text "Some content" ]
 ```
 
 ## Credits
