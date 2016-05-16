@@ -61,8 +61,7 @@ type Step =
 {-| Transition msg, to be wrapped in your own msg type. -}
 type Msg
   = Start Time
-  | ExitTick Time
-  | EnterTick Time
+  | Tick Time
 
 
 {-| Empty transition state, as initial value in the model. -}
@@ -148,13 +147,12 @@ tick tagger msg parent =
       ({ parent | transition = T state }, Cmd.map tagger fx)
   in
     case msg of
-
       Start time ->
         tag ( { state | step = Exit, start = time }, Cmd.none )
 
-      ExitTick time ->
-        case state.timeline of
-          Just tl ->
+      Tick time ->
+        case ( state.step, state.timeline ) of
+          ( Exit, Just tl ) ->
             if time < state.start + tl.exitDuration then
               -- update value
               tag ( { state | step = Exit, value = 1 - (time - state.start) / tl.exitDuration }, Cmd.none )
@@ -163,13 +161,7 @@ tick tagger msg parent =
               tag ( { state | step = Enter, start = time, value = 0 }, Cmd.none )
                 |> triggerTimelineMsg tl.msg
 
-          Nothing ->
-            -- should not happen
-            (parent, Cmd.none)
-
-      EnterTick time ->
-        case state.timeline of
-          Just tl ->
+          ( Enter, Just tl ) ->
             if time < state.start + tl.enterDuration then
               -- update value
               tag ( { state | value = (time - state.start) / tl.enterDuration }, Cmd.none )
@@ -177,7 +169,7 @@ tick tagger msg parent =
               -- finished
               tag ( { state | step = Done, value = 1 }, Cmd.none )
 
-          Nothing ->
+          _ ->
             -- should not happen
             (parent, Cmd.none)
 
@@ -185,21 +177,18 @@ tick tagger msg parent =
 {-| Animation frame subscription. Must be called by your component's subscription function. -}
 subscriptions : (Msg -> msg) -> WithTransition parent msg -> Sub msg
 subscriptions tagger parent =
-  case .step (getState parent.transition) of
-    Exit ->
-      AnimationFrame.times (ExitTick >> tagger)
-
-    Enter ->
-      AnimationFrame.times (EnterTick >> tagger)
-
+  case getStep parent.transition of
     Done ->
       Sub.none
+
+    _ ->
+      AnimationFrame.times (Tick >> tagger)
 
 
 {-| Private: join parent msg within a batch. -}
 triggerTimelineMsg : msg -> (WithTransition parent msg, Cmd msg) -> (WithTransition parent msg, Cmd msg)
 triggerTimelineMsg parentMsg (state, cmd) =
-  (state, Cmd.batch [ cmd, performSucceed identity (Task.succeed parentMsg) ])
+  ( state, Cmd.batch [ cmd, performSucceed identity (Task.succeed parentMsg) ] )
 
 
 {-| Extract current animation value (a float between 0 and 1). -}
