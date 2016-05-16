@@ -55,7 +55,7 @@ update action model =
       ({ model | page = page }, Cmd.none)
 ```
 
-A subscription is necessary to get animation frame ticks:
+A subscription is necessary to receive animation frame ticks when transition is running:
 
 ```elm
 subscriptions : Model -> Sub Msg
