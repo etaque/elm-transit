@@ -19,22 +19,25 @@ Use `WithTransition` record extension to extend your own model:
 ```elm
 import Transit
 
-type Page = Page1 | Page2
+type Msg =
+  NavigateTo Page | SetPage Page | TransitMsg Transit.Msg
 
-type alias Model = Transit.WithTransition { page: Page }
+type Page =
+  Page1 | Page2
+
+-- notice `Msg` at end of type declaration
+-- that's the type of the message to send during the transition
+type alias Model =
+  Transit.WithTransition { page: Page } Msg
 ```
 
 You're not bound to root model, you can also use it for sub-pages or components transitions.
 
-Then wrap `Action` in one of your action types and call `init` and
-`update` in your update function.
-
-Note that here we have a kind of recursive type definition, as `Transit.Action` with eventually trigger one `Action`.
+Then wrap `Msg` in one of your action types and call `start` and
+`tick` in your update function.
 
 ```elm
-type Action = NavigateTo Page | SetPage Page | TransitAction (Transit.Action Action)
-
-update : Action -> Model -> (Model, Effects Action)
+update : Msg -> Model -> (Model, Cmd Msg)
 update action model =
   case action of
 
@@ -43,18 +46,26 @@ update action model =
         timeline = Transit.timeline 100 (SetPage page) 200
         -- 100ms from 0 to 1, then action, then 200ms from 0 to 1
       in
-        Transit.init TransitAction timeline model
+        Transit.start TransitMsg timeline model
 
-    TransitAction a ->
-      Transit.update TransitAction a model
+    TransitMsg a ->
+      Transit.tick TransitMsg a model
         
     SetPage page ->
-      ({ model | page = page }, Effects.none)
+      ({ model | page = page }, Cmd.none)
+```
+
+A subscription is necessary to get animation frame ticks:
+
+```elm
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  Transit.subscriptions TransitMsg model
 ```
 
 In your views, you can then either:
 
-* Use `getValue` to get the 0 to 1 varying Float, and `getStatus` to know the current phase of transition.
+* Use `getValue` to get the 1 -> 0 -> 1 varying Float, and `getStep` to know the current phase of transition.
 
 * Or use one of the provided functions in [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-router/latest) (or create one of your own)
 to add the visual effect in your view:
@@ -66,4 +77,3 @@ to add the visual effect in your view:
 ## Credits
 
 * Thanks [Alex Galays](https://twitter.com/boubiyeah) for the challenge
-* Built with [elm-animations](http://package.elm-lang.org/packages/mgold/elm-animation/latest), check it out!

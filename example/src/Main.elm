@@ -1,73 +1,75 @@
-module Main where
+module Main exposing (..)
 
+import Html.App as Html
 import Html exposing (..)
 import Html.Events exposing (..)
 import Html.Attributes exposing (..)
-
-import Task
-import Signal exposing (Address)
-import Effects exposing (Effects, Never)
-import StartApp
 import Transit
-import TransitStyle
 
 
-type alias Model = Transit.WithTransition { page : Page }
+type alias Model =
+  Transit.WithTransition { page : Page } Msg
 
-type Page = Page1 | Page2
 
-type Action
+type Page =
+  Page1 | Page2
+
+
+type Msg
   = Click Page
   | SetPage Page
-  | TransitAction (Transit.Action Action)
+  | TransitMsg Transit.Msg
 
 
-init : (Model, Effects Action)
+init : (Model, Cmd Msg)
 init =
-  ({ page = Page1, transition = Transit.initial }, Effects.none)
+  ({ page = Page1, transition = Transit.initial }, Cmd.none)
 
 
-update : Action -> Model -> (Model, Effects Action)
-update action model =
-  case action of
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model =
+  case msg of
 
     Click page ->
       let
-        timeline = Transit.timeline 100 (SetPage page) 200
+        timeline = Transit.timeline 500 (SetPage page) 500
       in
-        Transit.init TransitAction timeline model
+        Transit.start TransitMsg timeline model
 
     SetPage page ->
-      ({ model | page = page }, Effects.none)
+      ({ model | page = page }, Cmd.none)
 
-    TransitAction transitAction ->
-      Transit.update TransitAction transitAction model
+    TransitMsg transitMsg ->
+      Transit.tick TransitMsg transitMsg model
 
 
-view : Address Action -> Model -> Html
-view addr model =
+view : Model -> Html Msg
+view model =
   div []
     [ nav []
-      [ a [ onClick addr (Click Page1) ] [ text "To page 1" ]
-      , a [ onClick addr (Click Page2) ] [ text "To page 2" ]
+      [ a [ onClick (Click Page1) ] [ text "To page 1" ]
+      , a [ onClick (Click Page2) ] [ text "To page 2" ]
       ]
     , div
-        [ style (TransitStyle.fadeSlideLeft 100 model.transition) ]
-        [ text (toString model.page) ]
+        [ ]
+        [ p
+            [ style [ ("opacity", toString (Transit.getValue model.transition)) ] ]
+            [ text (toString model.page) ]
+        , p [] [ text (toString (Transit.getStep model.transition)) ]
+        , p [] [ text (toString (Transit.getValue model.transition)) ]
+        ]
     ]
 
 
-app =
-  StartApp.start
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  Transit.subscriptions TransitMsg model
+
+
+main =
+  Html.program
     { init = init
     , update = update
     , view = view
-    , inputs = []
+    , subscriptions = subscriptions
     }
-
-
-main = app.html
-
-
-port tasks : Signal (Task.Task Never ())
-port tasks = app.tasks

@@ -1,219 +1,226 @@
-module Transit
+module Transit exposing
   ( Transition, WithTransition, initial
   , Timeline, timeline, defaultTimeline, withEnterDuration, withExitDuration
-  , Action, init, update
-  , Status(..), getStatus, getValue
-  ) where
+  , Msg, start, tick, subscriptions
+  , Step(..), getStep, getValue
+  )
 
 {-| Styled transitions with minimal boilerplate, typically for page transitions in single page apps.
 
 See README or [example](https://github.com/etaque/elm-transit/blob/master/example/src/Main.elm) for usage.
 
-Uses elm-animations and Effects.tick for animation logic.
+Uses elm-animations and Cmd.tick for animation logic.
 
-# Model
+# State
 @docs Transition, WithTransition, initial
 
 # Timeline
 @docs Timeline, timeline, defaultTimeline, withExitDuration, withEnterDuration
 
 # Update
-@docs Action, init, update
+@docs Msg, start, tick, subscriptions
 
 # View
-@docs getValue, getStatus, Status
+@docs getValue, getStep, Step
 -}
 
 import Time exposing (Time)
 import Task exposing (Task)
-import Effects exposing (Effects)
-import Animation exposing (Animation)
+import AnimationFrame
 
 
-{-| Extended type for the target model holding the transition. -}
-type alias WithTransition model = { model | transition : Transition }
+{-| Extended type for the parent model holding the transition. -}
+type alias WithTransition model msg =
+  { model | transition : Transition msg }
+
 
 {-| Opaque type for transition state storage. -}
-type Transition = T State
+type Transition msg =
+  T (State msg)
 
-{-| Private: internal state of the transition, stored in target model. -}
-type alias State =
-  { value : Float
-  , status : Status
-  , startTime : Time
+
+{-| Private. -}
+getState : Transition msg -> State msg
+getState transition =
+  case transition of T s -> s
+
+
+{-| Private: internal state of the transition, stored in parent model. -}
+type alias State msg =
+  { step : Step
+  , start : Time
+  , value : Float
+  , timeline : Maybe (Timeline msg)
   }
 
-{-| Transition status. -}
-type Status = Exit | Enter | Done
-
-{-| Private: animation state, stored in ticks. -}
-type alias AnimationState =
-  { startTime : Time
-  , animation : Animation
-  }
+{-| Transition step: Exit -> *send message* -> Enter -> Done. -}
+type Step =
+  Exit | Enter | Done
 
 
-{-| Transition action, to be wrapped in your own action type. -}
-type Action a
-  = Init (Timeline a)
-  | Start (Timeline a) Time
-  | ExitTick (Timeline a) AnimationState Time
-  | EnterTick AnimationState Time
+{-| Transition msg, to be wrapped in your own msg type. -}
+type Msg
+  = Start Time
+  | ExitTick Time
+  | EnterTick Time
 
 
 {-| Empty transition state, as initial value in the model. -}
-initial : Transition
+initial : Transition msg
 initial =
   T initialState
 
-
-{-| Private -}
-initialState : State
+{-| Private. -}
+initialState : State msg
 initialState =
-  State 0 Done 0
+  { step = Done, start = 0, value = 1, timeline = Nothing }
 
 
 {-| Timeline of the transition -}
-type alias Timeline a =
+type alias Timeline msg =
   { exitDuration : Float
-  , action : a
+  , msg : msg
   , enterDuration : Float
   }
 
+
 {-| Build the timeline:
-> exitDuration => action => enterDuration
+> exitDuration => message => enterDuration
 -}
-timeline : Float -> a -> Float -> Timeline a
+timeline : Float -> msg -> Float -> Timeline msg
 timeline =
   Timeline
 
-{-| Default timeline for this action: exit of 100ms then enter of 200ms. -}
-defaultTimeline : a -> Timeline a
-defaultTimeline action =
-  Timeline 100 action 200
+
+{-| Default timeline for this transition: exit of 50ms then enter of 200ms. -}
+defaultTimeline : msg -> Timeline msg
+defaultTimeline msg =
+  Timeline 50 msg 200
 
 
 {-| Update exit duration of timeline. -}
-withExitDuration : Float -> Timeline a -> Timeline a
+withExitDuration : Float -> Timeline msg -> Timeline msg
 withExitDuration d timeline =
   { timeline | exitDuration = d }
 
 
 {-| Update enter duration of timeline. -}
-withEnterDuration : Float -> Timeline a -> Timeline a
+withEnterDuration : Float -> Timeline msg -> Timeline msg
 withEnterDuration d timeline =
   { timeline | enterDuration = d }
 
 
-{-| A shortcut to `update` that initialize the transition with the following parameters:
-* `actionWrapper` to wrap Transit's action into your app's Action type (saves you one `Effects.map`)
+{-| Start the transition with the following parameters:
+
+* `tagger` to wrap Transit's Msg into your app's Msg type (consistent with `tick` signature, saves you one `Cmd.map`)
 * `timeline` to setup transition
-* `target` is the model storing the Transition, that will be updated with new transition state
-Returns a tuple that you can directly return from your `update`.
+* `parent` is the model storing the Transition, to update with new transition state
+
+Returns a tuple that you can directly emit from your `update`.
  -}
-init : ((Action a) -> a) -> Timeline a -> WithTransition target -> (WithTransition target, Effects a)
-init actionWrapper timeline =
-  update actionWrapper (Init timeline)
+start : (Msg -> msg) -> Timeline msg -> WithTransition parent msg -> (WithTransition parent msg, Cmd msg)
+start tagger timeline parent =
+  let
+    newParent =
+      { parent | transition = T { initialState | timeline = Just timeline} }
+
+    cmd =
+      Cmd.map tagger (performSucceed Start Time.now)
+  in
+    ( newParent, cmd )
 
 
-{-| Where all the logic happens. Run transition steps, and triggers timeline's action when needed.
-* `actionWrapper` to wrap Transit's action into app's Action type (saves one `Effects.map`),
-* `action` is the Transit action to process,
-* `target` is the model storing the Transition, that will be updated with new transition state.
+{-| Where all the logic happens. Run transition steps, and triggers timeline's parent message when needed.
+
+* `tagger` to wrap Transit's msg into app's Msg type, has to be same type of timeline.msg,
+* `msg` is the Transit message to process,
+* `parent` is the model storing the Transition, for transition state update.
  -}
-update : ((Action a) -> a) -> Action a -> WithTransition target -> (WithTransition target, Effects a)
-update actionWrapper action target =
+tick : (Msg -> msg) -> Msg -> WithTransition parent msg -> (WithTransition parent msg, Cmd msg)
+tick tagger msg parent =
   let
     -- extract state from shadow type
-    state = case target.transition of T s -> s
+    state =
+      getState parent.transition
 
-    -- stop everything if an other (newer) transition has been stored in target
-    watchRetarget animState (newState, fx) =
-      if state.startTime == animState.startTime then
-        (newState, fx)
-      else
-        (state, Effects.none)
-
-    -- wrap result for target's types
-    wrapForTarget (state, fx) =
-      ({ target | transition = T state }, Effects.map actionWrapper fx)
-
+    -- wrap result for parent's types
+    tag (state, fx) =
+      ({ parent | transition = T state }, Cmd.map tagger fx)
   in
-    case action of
+    case msg of
 
-      Init timeline ->
-        -- start transition with a tick (time is required for animation start)
-        (State 0 Exit 0, Effects.tick (Start timeline))
-          |> wrapForTarget
+      Start time ->
+        tag ( { state | step = Exit, start = time }, Cmd.none )
 
-      Start timeline time ->
-        -- emit initial ExitTick carrying animation state
-        let
-          newAnim = Animation.animation time
-            |> Animation.duration timeline.exitDuration
-            |> Animation.ease identity
-          -- store transition start time to be able to deal with retargeting
-          newState = { state | startTime = time }
-        in
-          exitStep 0 timeline (AnimationState time newAnim) newState
-            |> wrapForTarget
+      ExitTick time ->
+        case state.timeline of
+          Just tl ->
+            if time < state.start + tl.exitDuration then
+              -- update value
+              tag ( { state | step = Exit, value = 1 - (time - state.start) / tl.exitDuration }, Cmd.none )
+            else
+              -- emit msg, move to entering
+              tag ( { state | step = Enter, start = time, value = 0 }, Cmd.none )
+                |> triggerTimelineMsg tl.msg
 
-      ExitTick timeline animState time ->
-        if Animation.isRunning time animState.animation then
-          -- emit next ExitTick while animation is running
-          exitStep (Animation.animate time animState.animation) timeline animState state
-            |> watchRetarget animState
-            |> wrapForTarget
-        else
-          -- otherwise trigger action and emit initial EnterTick with new animation state
-          let
-            newAnim = Animation.animation time
-              |> Animation.duration timeline.enterDuration
-              |> Animation.ease identity
-          in
-            enterStep 0 { animState | animation = newAnim } state
-              |> watchRetarget animState
-              |> wrapForTarget
-              |> triggerTimelineAction timeline.action
+          Nothing ->
+            -- should not happen
+            (parent, Cmd.none)
 
-      EnterTick animState time ->
-        if Animation.isRunning time animState.animation then
-          -- emit next EnterTick while animation is running
-          enterStep (Animation.animate time animState.animation) animState state
-            |> watchRetarget animState
-            |> wrapForTarget
-        else
-          -- otherwise stop here
-          (initialState, Effects.none)
-            |> wrapForTarget
+      EnterTick time ->
+        case state.timeline of
+          Just tl ->
+            if time < state.start + tl.enterDuration then
+              -- update value
+              tag ( { state | value = (time - state.start) / tl.enterDuration }, Cmd.none )
+            else
+              -- finished
+              tag ( { state | step = Done, value = 1 }, Cmd.none )
+
+          Nothing ->
+            -- should not happen
+            (parent, Cmd.none)
 
 
-{-| Private: add target action within a batch. -}
-triggerTimelineAction : a -> (WithTransition target, Effects a) -> (WithTransition target, Effects a)
-triggerTimelineAction targetAction (state, fx) =
-  (state, Effects.batch [ fx, Effects.task <| Task.succeed targetAction ])
+{-| Animation frame subscription. Must be called by your component's subscription function. -}
+subscriptions : (Msg -> msg) -> WithTransition parent msg -> Sub msg
+subscriptions tagger parent =
+  case .step (getState parent.transition) of
+    Exit ->
+      AnimationFrame.times (ExitTick >> tagger)
+
+    Enter ->
+      AnimationFrame.times (EnterTick >> tagger)
+
+    Done ->
+      Sub.none
 
 
-{-| Private: update state and emit tick for Exit step. -}
-exitStep : Float -> Timeline target -> AnimationState -> State -> (State, Effects (Action target))
-exitStep value timeline animState state =
-  ({ state | value = value, status = Exit }, Effects.tick (ExitTick timeline animState))
-
-
-{-| Private: update state and emit tick for Enter step. -}
-enterStep : Float -> AnimationState -> State -> (State, Effects (Action target))
-enterStep value animState state =
-  ({ state | value = value, status = Enter }, Effects.tick (EnterTick animState))
+{-| Private: join parent msg within a batch. -}
+triggerTimelineMsg : msg -> (WithTransition parent msg, Cmd msg) -> (WithTransition parent msg, Cmd msg)
+triggerTimelineMsg parentMsg (state, cmd) =
+  (state, Cmd.batch [ cmd, performSucceed identity (Task.succeed parentMsg) ])
 
 
 {-| Extract current animation value (a float between 0 and 1). -}
-getValue : Transition -> Float
+getValue : (Transition msg) -> Float
 getValue (T state) =
   state.value
 
 
-{-| Extract current animation status. -}
-getStatus : Transition -> Status
-getStatus (T state) =
-  state.status
+{-| Extract current animation step. -}
+getStep : (Transition msg) -> Step
+getStep (T state) =
+  state.step
 
+
+{-| Private. -}
+performSucceed : (a -> msg) -> Task Never a -> Cmd msg
+performSucceed =
+  Task.perform never
+
+
+{-| Private. -}
+never : Never -> a
+never n =
+  never n
