@@ -8,7 +8,7 @@ import Transit
 
 
 type alias Model =
-  Transit.WithTransition { page : Page } Msg
+  Transit.WithTransition { page : Page }
 
 
 type Page =
@@ -18,23 +18,19 @@ type Page =
 type Msg
   = Click Page
   | SetPage Page
-  | TransitMsg Transit.Msg
+  | TransitMsg (Transit.Msg Msg)
 
 
-init : (Model, Cmd Msg)
+init : ( Model, Cmd Msg )
 init =
-  ({ page = Page1, transition = Transit.initial }, Cmd.none)
+  ({ page = Page1, transition = Transit.empty }, Cmd.none)
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-
     Click page ->
-      let
-        timeline = Transit.timeline 500 (SetPage page) 500
-      in
-        Transit.start TransitMsg timeline model
+      Transit.start TransitMsg (SetPage page) ( 500, 500 ) model
 
     SetPage page ->
       ({ model | page = page }, Cmd.none)
@@ -66,6 +62,7 @@ subscriptions model =
   Transit.subscriptions TransitMsg model
 
 
+main : Program Never
 main =
   Html.program
     { init = init

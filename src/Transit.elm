@@ -1,6 +1,5 @@
 module Transit exposing
-  ( Transition, WithTransition, initial
-  , Timeline, timeline, defaultTimeline, withEnterDuration, withExitDuration
+  ( Transition, WithTransition, empty
   , Msg, start, tick, subscriptions
   , Step(..), getStep, getValue
   )
@@ -12,10 +11,7 @@ See README or [example](https://github.com/etaque/elm-transit/blob/master/exampl
 Uses elm-animations and Cmd.tick for animation logic.
 
 # State
-@docs Transition, WithTransition, initial
-
-# Timeline
-@docs Timeline, timeline, defaultTimeline, withExitDuration, withEnterDuration
+@docs Transition, WithTransition, empty
 
 # Update
 @docs Msg, start, tick, subscriptions
@@ -26,107 +22,87 @@ Uses elm-animations and Cmd.tick for animation logic.
 
 import Time exposing (Time)
 import Task exposing (Task)
+import Process
 import AnimationFrame
 
 
 {-| Extended type for the parent model holding the transition. -}
-type alias WithTransition model msg =
-  { model | transition : Transition msg }
+type alias WithTransition model =
+  { model | transition : Transition }
 
 
 {-| Opaque type for transition state storage. -}
-type Transition msg =
-  T (State msg)
+type Transition =
+  T State
 
 
 {-| Private. -}
-getState : Transition msg -> State msg
+getState : Transition -> State
 getState transition =
   case transition of T s -> s
 
 
 {-| Private: internal state of the transition, stored in parent model. -}
-type alias State msg =
+type alias State =
   { step : Step
   , start : Time
   , value : Float
-  , timeline : Maybe (Timeline msg)
+  , durations : ( Time, Time )
   }
 
 {-| Transition step: Exit -> *send message* -> Enter -> Done. -}
-type Step =
-  Exit | Enter | Done
+type Step
+  = Exit
+  | Enter
+  | Done
 
 
 {-| Transition msg, to be wrapped in your own msg type. -}
-type Msg
-  = Start Time
+type Msg msg
+  = Start msg Time
   | Tick Time
+  | EmitMsg msg Time
 
 
 {-| Empty transition state, as initial value in the model. -}
-initial : Transition msg
-initial =
+empty : Transition
+empty =
   T initialState
 
-{-| Private. -}
-initialState : State msg
+
+{-| Private. -}
+initialState : State
 initialState =
-  { step = Done, start = 0, value = 1, timeline = Nothing }
+  { step = Done, start = 0, value = 1, durations = ( 0, 0 ) }
 
 
 {-| Timeline of the transition -}
-type alias Timeline msg =
-  { exitDuration : Float
-  , msg : msg
-  , enterDuration : Float
-  }
-
-
-{-| Build the timeline:
-> exitDuration => message => enterDuration
--}
-timeline : Float -> msg -> Float -> Timeline msg
-timeline =
-  Timeline
-
-
-{-| Default timeline for this transition: exit of 50ms then enter of 200ms. -}
-defaultTimeline : msg -> Timeline msg
-defaultTimeline msg =
-  Timeline 50 msg 200
-
-
-{-| Update exit duration of timeline. -}
-withExitDuration : Float -> Timeline msg -> Timeline msg
-withExitDuration d timeline =
-  { timeline | exitDuration = d }
-
-
-{-| Update enter duration of timeline. -}
-withEnterDuration : Float -> Timeline msg -> Timeline msg
-withEnterDuration d timeline =
-  { timeline | enterDuration = d }
+type alias Durations =
+  ( Float, Float )
 
 
 {-| Start the transition with the following parameters:
 
 * `tagger` to wrap Transit's Msg into your app's Msg type (consistent with `tick` signature, saves you one `Cmd.map`)
-* `timeline` to setup transition
+* `parentMsg` to send at end of exit
+* `durations` of transition steps (exit phase then enter phase)
 * `parent` is the model storing the Transition, to update with new transition state
 
 Returns a tuple that you can directly emit from your `update`.
  -}
-start : (Msg -> msg) -> Timeline msg -> WithTransition parent msg -> (WithTransition parent msg, Cmd msg)
-start tagger timeline parent =
+start : (Msg msg -> msg) -> msg -> ( Time, Time ) -> WithTransition parent -> (WithTransition parent, Cmd msg)
+start tagger parentMsg durations parent =
   let
-    newParent =
-      { parent | transition = T { initialState | timeline = Just timeline} }
+    state =
+      getState parent.transition
+
+    newState =
+      { state | durations = durations }
 
     cmd =
-      Cmd.map tagger (performSucceed Start Time.now)
+      Cmd.map tagger (performSucceed (Start parentMsg) Time.now)
   in
-    ( newParent, cmd )
+    ( { parent | transition = T newState }, cmd )
 
 
 {-| Where all the logic happens. Run transition steps, and triggers timeline's parent message when needed.
@@ -135,7 +111,7 @@ start tagger timeline parent =
 * `msg` is the Transit message to process,
 * `parent` is the model storing the Transition, for transition state update.
  -}
-tick : (Msg -> msg) -> Msg -> WithTransition parent msg -> (WithTransition parent msg, Cmd msg)
+tick : (Msg msg -> msg) -> Msg msg -> WithTransition parent -> ( WithTransition parent, Cmd msg )
 tick tagger msg parent =
   let
     -- extract state from shadow type
@@ -147,35 +123,47 @@ tick tagger msg parent =
       ({ parent | transition = T state }, Cmd.map tagger fx)
   in
     case msg of
-      Start time ->
-        tag ( { state | step = Exit, start = time }, Cmd.none )
+      Start parentMsg time ->
+        let
+          emitTask =
+            Task.succeed (EmitMsg parentMsg time)
+
+          emitCmd =
+            delay (fst state.durations) emitTask
+              |> performSucceed identity
+        in
+          tag ( { state | step = Exit, start = time },  emitCmd)
+
+      EmitMsg parentMsg time ->
+        if time == state.start then
+          ( parent, performSucceed identity (Task.succeed parentMsg))
+        else
+          ( parent, Cmd.none )
 
       Tick time ->
-        case ( state.step, state.timeline ) of
-          ( Exit, Just tl ) ->
-            if time < state.start + tl.exitDuration then
+        case state.step of
+          Exit ->
+            if time < state.start + (fst state.durations) then
               -- update value
-              tag ( { state | step = Exit, value = 1 - (time - state.start) / tl.exitDuration }, Cmd.none )
+              tag ( { state | step = Exit, value = 1 - (time - state.start) / (fst state.durations) }, Cmd.none )
             else
-              -- emit msg, move to entering
+              -- move to entering
               tag ( { state | step = Enter, start = time, value = 0 }, Cmd.none )
-                |> triggerTimelineMsg tl.msg
 
-          ( Enter, Just tl ) ->
-            if time < state.start + tl.enterDuration then
+          Enter ->
+            if time < state.start + (snd state.durations) then
               -- update value
-              tag ( { state | value = (time - state.start) / tl.enterDuration }, Cmd.none )
+              tag ( { state | value = (time - state.start) / (snd state.durations) }, Cmd.none )
             else
               -- finished
               tag ( { state | step = Done, value = 1 }, Cmd.none )
 
-          _ ->
-            -- should not happen
+          Done ->
             (parent, Cmd.none)
 
 
 {-| Animation frame subscription. Must be called by your component's subscription function. -}
-subscriptions : (Msg -> msg) -> WithTransition parent msg -> Sub msg
+subscriptions : (Msg msg -> msg) -> WithTransition parent -> Sub msg
 subscriptions tagger parent =
   case getStep parent.transition of
     Done ->
@@ -185,20 +173,14 @@ subscriptions tagger parent =
       AnimationFrame.times (Tick >> tagger)
 
 
-{-| Private: join parent msg within a batch. -}
-triggerTimelineMsg : msg -> (WithTransition parent msg, Cmd msg) -> (WithTransition parent msg, Cmd msg)
-triggerTimelineMsg parentMsg (state, cmd) =
-  ( state, Cmd.batch [ cmd, performSucceed identity (Task.succeed parentMsg) ] )
-
-
 {-| Extract current animation value (a float between 0 and 1). -}
-getValue : (Transition msg) -> Float
+getValue : Transition -> Float
 getValue (T state) =
   state.value
 
 
 {-| Extract current animation step. -}
-getStep : (Transition msg) -> Step
+getStep : Transition -> Step
 getStep (T state) =
   state.step
 
@@ -213,3 +195,9 @@ performSucceed =
 never : Never -> a
 never n =
   never n
+
+
+{-| Private. -}
+delay : Time -> Task x a -> Task x a
+delay time task =
+  Process.sleep time `Task.andThen` (\_ -> task)
