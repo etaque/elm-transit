@@ -19,16 +19,16 @@ Use `WithTransition` record extension to extend your own model:
 ```elm
 import Transit
 
-type Msg =
-  NavigateTo Page | SetPage Page | TransitMsg Transit.Msg
+-- see recursive type param: Transit needs to know the type of message it will send delayed
+type Msg
+  = NavigateTo Page
+  | SetPage Page
+  | TransitMsg (Transit.Msg Msg)
 
-type Page =
-  Page1 | Page2
+type Page = Page1 | Page2
 
--- notice `Msg` at end of type declaration
--- that's the type of the message to send during the transition
 type alias Model =
-  Transit.WithTransition { page: Page } Msg
+  Transit.WithTransition { page: Page }
 ```
 
 You're not bound to root model, you can also use it for sub-pages or components transitions.
@@ -42,11 +42,8 @@ update action model =
   case action of
 
     NavigateTo page ->
-      let
-        timeline = Transit.timeline 100 (SetPage page) 200
-        -- 100ms from 0 to 1, then action, then 200ms from 0 to 1
-      in
-        Transit.start TransitMsg timeline model
+      -- exit phase of 100ms, then `(SetPage page)` will be sent, then enter phase of 200ms
+      Transit.start TransitMsg (SetPage page) ( 100, 200 ) model
 
     TransitMsg a ->
       Transit.tick TransitMsg a model
