@@ -148,12 +148,12 @@ tick tagger msg parent =
               tag ( { state | step = Exit, value = 1 - (time - state.start) / (fst state.durations) }, Cmd.none )
             else
               -- move to entering
-              tag ( { state | step = Enter, start = time, value = 0 }, Cmd.none )
+              tag ( { state | step = Enter, value = 0 }, Cmd.none )
 
           Enter ->
-            if time < state.start + (snd state.durations) then
+            if time < state.start + (fst state.durations) + (snd state.durations) then
               -- update value
-              tag ( { state | value = (time - state.start) / (snd state.durations) }, Cmd.none )
+              tag ( { state | value = (time - state.start - (fst state.durations)) / (snd state.durations) }, Cmd.none )
             else
               -- finished
               tag ( { state | step = Done, value = 1 }, Cmd.none )
