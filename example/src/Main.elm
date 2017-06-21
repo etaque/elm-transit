@@ -1,6 +1,5 @@
 module Main exposing (..)
 
-import Html.App as Html
 import Html exposing (..)
 import Html.Events exposing (..)
 import Html.Attributes exposing (..)
@@ -61,8 +60,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
   Transit.subscriptions TransitMsg model
 
-
-main : Program Never
+main : Program Never Model Msg
 main =
   Html.program
     { init = init
