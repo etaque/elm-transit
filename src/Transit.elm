@@ -155,7 +155,7 @@ tick tagger msg parent =
                     tag ( { state | step = Exit, start = time }, emitCmd )
 
             EmitMsg parentMsg time ->
-                if time == state.start then
+                if time >= state.start then
                     ( parent, Task.perform identity (Task.succeed parentMsg) )
                 else
                     ( parent, Cmd.none )
