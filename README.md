@@ -6,7 +6,7 @@ Delayed actions with transition progress for enter/exit animations in [Elm](http
 
 See also:
 
-* [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-router/latest): animations for elm-html `style` attribute
+* [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-style/latest): animations for elm-html `style` attribute
 
 
 ## Usage
