@@ -12,7 +12,7 @@ See also:
 
 ## Usage
 
-(Full working example [here](./example/src))
+(Full working example [here](https://github.com/etaque/elm-transit/tree/master/example/src))
 
 Use `WithTransition` record extension to extend your own model:
 
