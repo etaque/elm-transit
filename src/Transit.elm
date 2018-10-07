@@ -123,7 +123,7 @@ start tagger parentMsg durations parent =
             getState parent.transition
 
         newState =
-            { state | durations = durations }
+            { state | durations = durations, step = Exit }
 
         cmd =
             Cmd.map tagger (Task.perform (posixToTime >> Start parentMsg) Time.now)
