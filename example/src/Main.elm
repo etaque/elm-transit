@@ -1,9 +1,10 @@
-module Main exposing (..)
+module Main exposing (Model, Msg(..), Page(..), init, main, subscriptions, update, view)
 
+import Browser
 import Html exposing (..)
-import Html.Events exposing (..)
 import Html.Attributes exposing (..)
-import Transit
+import Html.Events exposing (..)
+import Transit exposing (Step(..))
 
 
 type alias Model =
@@ -21,8 +22,12 @@ type Msg
     | TransitMsg (Transit.Msg Msg)
 
 
-init : ( Model, Cmd Msg )
-init =
+type alias Flags =
+    {}
+
+
+init : Flags -> ( Model, Cmd Msg )
+init _ =
     ( { page = Page1, transition = Transit.empty }, Cmd.none )
 
 
@@ -49,10 +54,10 @@ view model =
         , div
             []
             [ p
-                [ style [ ( "opacity", toString (Transit.getValue model.transition) ) ] ]
-                [ text (toString model.page) ]
-            , p [] [ text (toString (Transit.getStep model.transition)) ]
-            , p [] [ text (toString (Transit.getValue model.transition)) ]
+                [ style "opacity" (String.fromFloat (Transit.getValue model.transition)) ]
+                [ text (pageToString model.page) ]
+            , p [] [ text (stepToString (Transit.getStep model.transition)) ]
+            , p [] [ text (String.fromFloat (Transit.getValue model.transition)) ]
             ]
         ]
 
@@ -62,11 +67,38 @@ subscriptions model =
     Transit.subscriptions TransitMsg model
 
 
-main : Program Never Model Msg
+main : Program Flags Model Msg
 main =
-    program
+    Browser.element
         { init = init
         , update = update
         , view = view
         , subscriptions = subscriptions
         }
+
+
+
+-- helper
+
+
+stepToString : Step -> String
+stepToString step =
+    case step of
+        Exit ->
+            "Exit"
+
+        Enter ->
+            "Enter"
+
+        Done ->
+            "Done"
+
+
+pageToString : Page -> String
+pageToString page =
+    case page of
+        Page1 ->
+            "Page1"
+
+        Page2 ->
+            "Page2"
