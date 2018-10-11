@@ -3,7 +3,7 @@
     "name": "etaque/elm-transit",
     "summary": "Simple transition animation for switching between pages in a single page app.",
     "license": "BSD-3-Clause",
-    "version": "7.0.4",
+    "version": "7.0.5",
     "exposed-modules": [
         "Transit"
     ],
