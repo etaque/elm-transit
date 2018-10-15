@@ -1,17 +1,17 @@
 # Elm Transit
 
-    elm package install etaque/elm-transit
+    elm install etaque/elm-transit
 
-Delayed actions with transition progress for enter/exit animations in [Elm](http://elm-lang.org/).
+Delayed actions with transition progress for enter/exit animations in [Elm](https://elm-lang.org).
 
 See also:
 
-* [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-style/latest): animations for elm-html `style` attribute
+* [elm-transit-style](https://package.elm-lang.org/packages/etaque/elm-transit-style/latest): animations for elm-html
 
 
 ## Usage
 
-(Full working example [here](https://github.com/etaque/elm-transit/tree/master/example/src))
+(Full working example [here](https://github.com/etaque/elm-transit/tree/master/example/src/Main.elm))
 
 Use `WithTransition` record extension to extend your own model:
 
@@ -63,11 +63,11 @@ In your views, you can then either:
 
 * Use `getValue` to get the 1 -> 0 -> 1 varying Float, and `getStep` to know the current phase of transition.
 
-* Or use one of the provided functions in [elm-transit-style](http://package.elm-lang.org/packages/etaque/elm-transit-style/latest) (or create one of your own)
+* Or use one of the provided functions in [elm-transit-style](https://package.elm-lang.org/packages/etaque/elm-transit-style/latest) (or create one of your own)
 to add the visual effect in your view:
 
 ```elm
-  div [ style (TransitStyle.fadeSlideLeft 50 model.transition) ] [ text "Some content" ]
+  div (TransitStyle.fadeSlideLeft 50 model.transition) [ text "Some content" ]
 ```
 
 ## Credits
